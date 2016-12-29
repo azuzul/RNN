@@ -1,5 +1,5 @@
 import numpy as np
-
+from itertools import product
 
 # ...
 # Code is nested in class definition, indentation is not representative.
@@ -37,7 +37,7 @@ class Dataset:
 
     def create_minibatches(self):
         # calculate the number of batches
-        self.num_batches = int(self.x.shape[0] / (self.batch_size * self.sequence_length))
+        self.num_batches = int(self.x.shape[0] / (self.batch_size * self.sequence_length+1))
         # Is all the data going to be present in the batches? Why?
         # What happens if we select a batch size and sequence length larger than the length of the data?
         assert self.num_batches != 0
@@ -45,9 +45,15 @@ class Dataset:
         #######################################
         #       Convert data to batches       #
         #######################################
+        batches = np.array([self.x[i * self.sequence_length: i * self.sequence_length + self.sequence_length + 1]
+                            for i in range(self.num_batches * self.batch_size)])
 
+        # kocka ili 2D polje stringova velicine num_bat x batch_size ( x len(string) )
+        self.mb = np.zeros([self.num_batches, self.batch_size, self.sequence_length + 1], dtype=np.int32)
+        for b, s in zip(product(np.arange(self.batch_size), np.arange(self.num_batches)), batches):
+            # u minibatc b[1] na mjesto b[0] stavljam sample s
+            self.mb[b[1], b[0], :] = s
 
-        self.mb = np.array([self.x[i: i + self.sequence_length] for i in range(self.num_batches * self.batch_size + 1)])
 
     def next_minibatch(self):
         new_epoch = False
@@ -55,10 +61,9 @@ class Dataset:
             self.current_batch = 0
             new_epoch = True
 
-        var = self.current_batch * self.batch_size
-        inp = self.mb[var: var + self.batch_size]
-        var += 1
-        o = self.mb[var: var + self.batch_size]
+        var = self.mb[self.current_batch, :, :]
+        inp = var[:, :self.sequence_length]
+        o = var[:, 1:]
         self.current_batch += 1
 
         batch_x, batch_y = inp, o
@@ -78,7 +83,7 @@ class Dataset:
             return np.array(list(map(onehot, batch)))
 
 def main1():
-    dataset = Dataset(1, 40)
+    dataset = Dataset(5, 5)
     dataset.preprocess("data/selected_conversations.txt")
     dataset.create_minibatches()
     for i in range(4):
@@ -91,6 +96,7 @@ def main1():
         print(t)
         print(dataset.decode(t[0]))
         print("\n\n")
+    f, s, t = dataset.next_minibatch()
 
 
 def main():

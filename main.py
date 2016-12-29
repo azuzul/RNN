@@ -10,7 +10,7 @@ def run_language_model(dataset, max_epochs, hidden_size=100, sequence_length=30,
     current_epoch = 0
     batch = 0
 
-    h0 = np.zeros((dataset.batch_size, hidden_size))
+    h0 = np.zeros((hidden_size, dataset.batch_size))
 
     seed = "HAN:\nIs that good or bad?\n\n"
     n_sample = 300
@@ -21,7 +21,7 @@ def run_language_model(dataset, max_epochs, hidden_size=100, sequence_length=30,
 
         if e:
             current_epoch += 1
-            h0 = np.zeros((dataset.batch_size, hidden_size))
+            h0 = np.zeros((hidden_size, dataset.batch_size))
             # why do we reset the hidden state here?
 
         # One-hot transform the x and y batches
@@ -39,25 +39,25 @@ def run_language_model(dataset, max_epochs, hidden_size=100, sequence_length=30,
             # run sampling (2.2)
             print("epoch: %d \t batch: %d/%d \t"%(current_epoch, batch%dataset.num_batches, dataset.num_batches), end="")
             print("Average_loss : %f" % (average_loss/(batch*dataset.batch_size)))
-            print(sample(h0, RNN, seed, n_sample, dataset))
+            print(sample(RNN, seed, n_sample, dataset))
         batch += 1
 
 
-def sample(h, rnn, seed, n_sample, dataset):
-    h0, seed_onehot, samp = np.zeros_like(h[-1]), dataset.one_hot(dataset.encode(seed), rnn.vocab_size), []
+def sample(rnn, seed, n_sample, dataset):
+    h0, seed_onehot, samp = np.zeros([rnn.hidden_size, 1]), dataset.one_hot(dataset.encode(seed), rnn.vocab_size), []
     # inicijalizirati h0 na vektor nula
     # seed string pretvoriti u one-hot reprezentaciju ulaza
     for i in range(n_sample):
         if i >= len(seed):
             h0, _ = rnn.rnn_step_forward(dataset.one_hot(np.array([samp[-1]]), rnn.vocab_size), h0, rnn.U, rnn.W, rnn.b)
         else:
-            h0, _ = rnn.rnn_step_forward(seed_onehot[i], h0, rnn.U, rnn.W, rnn.b)
+            h0, _ = rnn.rnn_step_forward(seed_onehot[i].reshape([1, -1]), h0, rnn.U, rnn.W, rnn.b)
         samp.append(np.argmax(rnn.output(h0, rnn.V, rnn.c)))
-    return str(dataset.decode(samp))
+    return dataset.decode(samp)#"".join(dataset.decode(samp))
 
 
 def main():
-    dataset = Dataset(1, 40)
+    dataset = Dataset(30, 40)
     dataset.preprocess("data/selected_conversations.txt")
     dataset.create_minibatches()
     run_language_model(dataset, 100, sequence_length=dataset.sequence_length)
