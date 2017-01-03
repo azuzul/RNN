@@ -3,16 +3,17 @@ import numpy as np
 from dataset import Dataset
 
 
-def run_language_model(dataset, max_epochs, hidden_size=100, sequence_length=30, learning_rate=5e-2, sample_every=100):
+def run_language_model(dataset, max_epochs, hidden_size=100, sequence_length=30, learning_rate=1e-1, sample_every=100):
     vocab_size = len(dataset.sorted_chars)
     RNN = Rnn(vocab_size, hidden_size, sequence_length, learning_rate)  # initialize the recurrent network
 
     current_epoch = 0
     batch = 0
 
-    h0 = np.zeros((hidden_size, dataset.batch_size))
-
-    seed = "HAN:\nIs that good or bad?\n\n"
+    #h0 = np.zeros((hidden_size, dataset.batch_size))
+    h0 = np.zeros((dataset.batch_size, hidden_size))
+    #TODO
+    seed = "HAN:\nIs that good or bad?\n\n" #"Lorem ipsum"#
     n_sample = 300
     average_loss = 0
 
@@ -21,7 +22,8 @@ def run_language_model(dataset, max_epochs, hidden_size=100, sequence_length=30,
 
         if e:
             current_epoch += 1
-            h0 = np.zeros((hidden_size, dataset.batch_size))
+            #h0 = np.zeros((hidden_size, dataset.batch_size))
+            h0 = np.zeros((dataset.batch_size, hidden_size))
             # why do we reset the hidden state here?
 
         # One-hot transform the x and y batches
@@ -44,7 +46,8 @@ def run_language_model(dataset, max_epochs, hidden_size=100, sequence_length=30,
 
 
 def sample(rnn, seed, n_sample, dataset):
-    h0, seed_onehot, samp = np.zeros([rnn.hidden_size, 1]), dataset.one_hot(dataset.encode(seed), rnn.vocab_size), []
+    #h0, seed_onehot, samp = np.zeros([rnn.hidden_size, 1]), dataset.one_hot(dataset.encode(seed), rnn.vocab_size), []
+    h0, seed_onehot, samp = np.zeros([1, rnn.hidden_size]), dataset.one_hot(dataset.encode(seed), rnn.vocab_size), []
     # inicijalizirati h0 na vektor nula
     # seed string pretvoriti u one-hot reprezentaciju ulaza
     for i in range(n_sample):
@@ -57,10 +60,11 @@ def sample(rnn, seed, n_sample, dataset):
 
 
 def main():
-    dataset = Dataset(30, 40)
+    #TODO
+    dataset = Dataset(30, 15)
     dataset.preprocess("data/selected_conversations.txt")
     dataset.create_minibatches()
-    run_language_model(dataset, 100, sequence_length=dataset.sequence_length)
+    run_language_model(dataset, 100000, sequence_length=dataset.sequence_length)
 
 if __name__ == '__main__':
     main()

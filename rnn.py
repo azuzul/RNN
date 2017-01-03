@@ -10,10 +10,10 @@ class RNN:
 
         self.U = 1e-2 * np.random.rand(vocab_size, hidden_size)  # input projection  D X H
         self.W = 1e-2 * np.random.rand(hidden_size, hidden_size)  # hidden-to-hidden projection H x H
-        self.b = np.zeros([hidden_size, 1])  # input bias H x 1
+        self.b = np.zeros([1, hidden_size])  # input bias H x 1
 
-        self.V = 1e-2 * np.random.rand(vocab_size, hidden_size)  # output projection
-        self.c = np.zeros([vocab_size, 1])  # output bias
+        self.V = 1e-2 * np.random.rand(hidden_size, vocab_size)  # output projection
+        self.c = np.zeros([1, vocab_size])  # output bias
 
         # memory of past gradients - rolling sum of squares for Adagrad
         self.memory_U, self.memory_W, self.memory_V = np.zeros_like(self.U), np.zeros_like(self.W), np.zeros_like(self.V)
@@ -29,7 +29,9 @@ class RNN:
         # W - hidden to hidden projection matrix (hidden size x hidden size)
         # b - bias of shape (hidden size x 1)
 
-        h_current = np.tanh(np.dot(W, h_prev) + np.dot(U.T, x.T) + b)   # BS x H
+
+        #h_current = np.tanh(np.dot(W, h_prev) + np.dot(U.T, x.T) + b)   # BS x H
+        h_current = np.tanh(np.dot(h_prev, W) + np.dot(x, U) + b)   #  (BS x H) * (H x H) + ( BS x D ) * (D x H) + (1 x H)
         h_current, cache = h_current, (W, x, h_prev, h_current)
 
         # return the new hidden state and a tuple of values needed for the backward step
@@ -63,8 +65,10 @@ class RNN:
         # cache - cached information from the forward pass
 
         W, x, h_prev = cache
-        dh_prev, dU, dW = np.dot(grad_next.T, W), np.dot(x.T, grad_next.T), np.dot(grad_next, h_prev.T)
-        db = np.sum(grad_next, axis=1).reshape([-1, 1])
+        #dh_prev, dU, dW = np.dot(grad_next.T, W), np.dot(x.T, grad_next.T), np.dot(grad_next, h_prev.T)
+        dh_prev, dU, dW = np.dot(grad_next, W), np.dot(x.T, grad_next), np.dot(grad_next.T, h_prev)
+        #db = np.sum(grad_next, axis=1).reshape([-1, 1])
+        db = np.sum(grad_next, axis=0).reshape([1, -1])
         # compute and return gradients with respect to each parameter
         # HINT: you can use the chain rule to compute the derivative of the
         # hyperbolic tangent function and use it to compute the gradient
@@ -84,14 +88,15 @@ class RNN:
         dp = np.zeros_like(dh[0])
         for t in range(self.sequence_length-1, 0, -1):
             W, x, h_prev, h_curr = cache[t]
-            dh_curr = dh[t] + np.dot(self.W, 1 - h_curr**2)  # trenutni grad + upstream * dht/dat * dat/dgt-1
+            #dh_curr = dh[t] + np.dot(self.W, 1 - h_curr**2)  # trenutni grad + upstream * dht/dat * dat/dgt-1
+            dh_curr = dh[t] + np.dot(1 - h_curr**2, self.W) * dp  # BS x H trenutni grad + upstream * dht/dat * dat/dgt-1
             dp, du, dw, dB = self.rnn_step_backward(dh_curr, (W, x, h_prev))
             dU, db, dW = du + dU, db + dB, dW + dw
         return np.clip(dU, -5, 5), np.clip(dW, -5, 5), np.clip(db, -5, 5)
 
     def output(self, h, V, c):
         # Calculate the output probabilities of the network
-        return np.dot(V, h) + c    # leng x BS
+        return np.dot(h, V) + c    # leng x BS
 
     def output_loss_and_grads(self, h, V, c, y):
         """Calculate the loss of the network for each of the outputs
@@ -119,15 +124,22 @@ class RNN:
         # calculate the gradients with respect to the output parameters V and c
         # calculate the gradients with respect to the hidden layer h
         for t in range(self.sequence_length):
-            hp = h[:, t, :]  # H x BS
-            o = self.output(hp, V, c)  # leng x BS
-            exp = np.exp(o)  # leng x BS
-            s = exp / np.sum(exp, axis=0, keepdims=True)  # leng x BS
-            yp = y[:, t, :].T
-            dO = s - yp  # leng x BS
-            dV += np.dot(dO, hp.T)  # ( leng x BS ) * ( H x BS ).T = leng x H
-            dc += np.sum(dO, axis=1).reshape([-1, 1])  #
-            dh.append(np.dot(self.V.T, dO))  # ( leng x H ).T * ( leng x BS ) = ( BS x H )
+            hp = h[:, t, :]  # BS x H
+            #o = self.output(hp, V, c)  # leng x BS
+            o = self.output(hp, V, c)  # BS x leng
+            #exp = np.exp(o)  # leng x BS
+            exp = np.exp(o)  # BS x leng
+            #s = exp / np.sum(exp, axis=0, keepdims=True)  # leng x BS
+            s = exp / np.sum(exp, axis=1, keepdims=True)  # BS x leng
+            yp = y[:, t, :]
+            #dO = s - yp  # leng x BS
+            dO = s - yp  # BS x leng
+            #dV += np.dot(dO, hp.T)  # ( leng x BS ) * ( H x BS ).T = leng x H
+            dV += np.dot(hp.T, dO)  # ( BS x H ).T * ( BS x leng ) = H x leng
+            #dc += np.sum(dO, axis=1).reshape([-1, 1])  #
+            dc += np.sum(dO, axis=0).reshape([1, -1])  #
+            #dh.append(np.dot(self.V.T, dO))  # ( leng x H ).T * ( leng x BS ) = ( BS x H )
+            dh.append(np.dot(dO, self.V.T))  # ( BS x leng ) * ( H x leng ).T = ( BS x H )
             loss += -np.sum(np.log(s)*yp)
         return loss, np.array(dh), dV, dc
 
@@ -147,8 +159,10 @@ class RNN:
     def step(self, h, x, y):
         h, cache = self.rnn_forward(x, h, self.U, self.W, self.b)
         loss, dh, dV, dc = self.output_loss_and_grads(h, self.V, self.c, y)
+        #print(dh)
         dU, dW, db = self.rnn_backward(dh, cache)
         self.update(dU, dW, db, dV, dc)
+        #print(dW)
         return loss, h[:, -1, :]
 
 

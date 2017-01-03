@@ -83,8 +83,8 @@ class Dataset:
             return np.array(list(map(onehot, batch)))
 
 def main1():
-    dataset = Dataset(5, 5)
-    dataset.preprocess("data/selected_conversations.txt")
+    dataset = Dataset(2, 5)
+    dataset.preprocess("test.txt")
     dataset.create_minibatches()
     for i in range(4):
         f, s, t = dataset.next_minibatch()
